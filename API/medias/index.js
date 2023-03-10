@@ -111,8 +111,8 @@ mediasRouter.get("/:imdbID", async (req, res, next) => {
 });
 
 mediasRouter.post(
-  "/:id/poster",
-  upload.single("poster"),
+  "/:id/poster", cloudinaryUploader,
+  upload.single("poster"), 
   async (req, res, next) => {
     try {
       const imgURL = `http://localhost:3001/public/${req.params.id}${extname(
