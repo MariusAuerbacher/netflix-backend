@@ -16,7 +16,7 @@ const cloudinaryUploader = multer({
   storage: new CloudinaryStorage({
     cloudinary,
     params: {
-      folder: "netflix-backend/medias",
+      folder: "netflix-backend/public/images",
     },
   }),
 }).single("poster");
@@ -38,23 +38,28 @@ const coverJSONPath = join(
   "../../public/images"
 );
 
-mediasRouter.post("/", checkMediasSchema, triggerBadRequest, async (req, res, next) => {
-  try {
-    const newMedia = {
-      ...req.body,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      imdbID: uniqid(),
-    };
-    const mediasArray = await getMedias();
-    mediasArray.push(newMedia);
+mediasRouter.post(
+  "/",
+  checkMediasSchema,
+  triggerBadRequest,
+  async (req, res, next) => {
+    try {
+      const newMedia = {
+        ...req.body,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        imdbID: uniqid(),
+      };
+      const mediasArray = await getMedias();
+      mediasArray.push(newMedia);
 
-    await writeMedias(mediasArray);
-    res.status(201).send({ imdbID: newMedia.imdbID });
-  } catch (error) {
-    next(error);
+      await writeMedias(mediasArray);
+      res.status(201).send({ imdbID: newMedia.imdbID });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 mediasRouter.get("/", async (req, res, next) => {
   try {
@@ -76,13 +81,12 @@ mediasRouter.get("/", async (req, res, next) => {
             year: media.Year,
             imdbID: media.imdbID,
             type: media.Type,
-            poster: media.Poster
-
-          }
-        })
-        const moviesArray = [...mediasArray, ...movies]
-        await writeMedias(moviesArray)
-        res.send(movies)
+            poster: media.Poster,
+          };
+        });
+        const moviesArray = [...mediasArray, ...movies];
+        await writeMedias(moviesArray);
+        res.send(movies);
       }
     } else {
       res.send(mediasArray);
@@ -111,8 +115,8 @@ mediasRouter.get("/:imdbID", async (req, res, next) => {
 });
 
 mediasRouter.post(
-  "/:id/poster", cloudinaryUploader,
-  upload.single("poster"), 
+  "/:id/poster", //cloudinaryUploader
+  upload.single("poster"),
   async (req, res, next) => {
     try {
       const imgURL = `http://localhost:3001/public/${req.params.id}${extname(
