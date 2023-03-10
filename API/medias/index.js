@@ -1,14 +1,15 @@
-import Express from "express"
+import Express from "express";
 import { getMedias, writeMedias } from "../../lib/medias-tools.js";
-import uniqid from "uniqid"
+import uniqid from "uniqid";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
-import {join, dirname, extname } from "path"
+import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import { getPDFReadableStream } from "../../lib/pdf-tools.js";
 import { pipeline } from "stream";
-
+import axios from "axios";
+import { checkMediasSchema, triggerBadRequest } from "./validation.js";
 
 const mediasRouter = Express.Router();
 const cloudinaryUploader = multer({
@@ -37,9 +38,7 @@ const coverJSONPath = join(
   "../../public/images"
 );
 
-
-
-mediasRouter.post("/", async (req, res, next) => {
+mediasRouter.post("/", checkMediasSchema, triggerBadRequest, async (req, res, next) => {
   try {
     const newMedia = {
       ...req.body,
@@ -47,12 +46,11 @@ mediasRouter.post("/", async (req, res, next) => {
       updatedAt: new Date(),
       imdbID: uniqid(),
     };
-    const mediasArray = await getMedias()
+    const mediasArray = await getMedias();
     mediasArray.push(newMedia);
 
     await writeMedias(mediasArray);
     res.status(201).send({ imdbID: newMedia.imdbID });
-
   } catch (error) {
     next(error);
   }
@@ -60,51 +58,83 @@ mediasRouter.post("/", async (req, res, next) => {
 
 mediasRouter.get("/", async (req, res, next) => {
   try {
-    const mediasArray = await getMedias()
-    res.send(mediasArray);
+    const mediasArray = await getMedias();
+    if (req.query.title) {
+      //search by title
+      const result = mediasArray.filter((media) =>
+        media.title.includes(req.query.title)
+      );
+      if (result.length > 0) {
+        res.send(result);
+      } else {
+        const moviesRes = await axios.get(
+          `https://www.omdbapi.com/?apikey=2beaba4d&s=${req.query.title}`
+        );
+        const movies = moviesRes.data.Search.map((media) => {
+          return {
+            title: media.Title,
+            year: media.Year,
+            imdbID: media.imdbID,
+            type: media.Type,
+            poster: media.Poster
+
+          }
+        })
+        const moviesArray = [...mediasArray, ...movies]
+        await writeMedias(moviesArray)
+        res.send(movies)
+      }
+    } else {
+      res.send(mediasArray);
+    }
   } catch (error) {
     next(error);
   }
 });
 mediasRouter.get("/:imdbID", async (req, res, next) => {
   try {
-    const mediasArray = await getMedias()
+    const mediasArray = await getMedias();
 
-  const foundMedias = mediasArray.find(
-    (media) => media.imdbID === req.params.imdbID
-  );
+    const foundMedias = mediasArray.find(
+      (media) => media.imdbID === req.params.imdbID
+    );
 
-  if (!foundMedias) {
-    next({ status: 400, message: "Post not found" });
-    return;
-  }
+    if (!foundMedias) {
+      next({ status: 400, message: "Post not found" });
+      return;
+    }
 
-  res.send(foundMedias);
-   
+    res.send(foundMedias);
   } catch (error) {
     next(error);
   }
 });
 
-mediasRouter.post("/:id/poster", upload.single("poster"), async (req, res, next) => {
-  try {
-    const imgURL = `http://localhost:3001/public/${req.params.id}${extname(
-      req.file.originalname
-    )}`;
-  
-    const mediasArray = getMedias()
-    const index = mediasArray.findIndex((media) => media.id === req.params.id);
-    const oldMedia = mediasArray[index];
-    const updatedMedia = { ...oldMedia, poster: imgURL };
-    mediasArray[index] = updatedMedia;
-  
-    await writeMedias(mediasArray);
-  
-    res.send(updatedMedia);
-  } catch (error) {
-    next(error);
+mediasRouter.post(
+  "/:id/poster",
+  upload.single("poster"),
+  async (req, res, next) => {
+    try {
+      const imgURL = `http://localhost:3001/public/${req.params.id}${extname(
+        req.file.originalname
+      )}`;
+
+      const mediasArray = await getMedias();
+      const index = mediasArray.findIndex(
+        (media) => media.id === req.params.id
+      );
+      const oldMedia = mediasArray[index];
+      const updatedMedia = { ...oldMedia, poster: imgURL };
+      mediasArray[index] = updatedMedia;
+
+      await writeMedias(mediasArray);
+
+      res.send(updatedMedia);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 mediasRouter.get("/:id/pdf", async (req, res, next) => {
   try {
@@ -125,5 +155,4 @@ mediasRouter.get("/:id/pdf", async (req, res, next) => {
   }
 });
 
-
-export default mediasRouter
+export default mediasRouter;
